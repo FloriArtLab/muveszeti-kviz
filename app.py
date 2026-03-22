@@ -12,6 +12,7 @@ st.set_page_config(
 
 # ---- fájl helye ----
 CSV_FAJL = Path("data/hungart_osszes_muvesz_adatok.csv")
+KEP_MAPPA = Path("images")
 
 
 # ---- adatok betöltése ----
@@ -22,29 +23,43 @@ def adatbetoltes():
 
     df = pd.read_csv(CSV_FAJL)
 
-    # üres helyek levágása
+    # szöveges oszlopok tisztítása
     for col in df.columns:
-        df[col] = df[col].astype(str).str.strip()
+        df[col] = df[col].fillna("").astype(str).str.strip()
+
+    # ha nincs filename oszlop, készítsük el az image_url-ből
+    if "filename" not in df.columns:
+        if "image_url" in df.columns:
+            df["filename"] = df["image_url"].str.split("/").str[-1]
+        else:
+            df["filename"] = ""
+
+    # helyi képelérési út
+    df["local_image_path"] = df["filename"].apply(lambda x: str(KEP_MAPPA / x) if x else "")
+
+    # csak olyan sorok maradjanak, ahol van művész + kép
+    if "artist_name" not in df.columns:
+        st.error("A CSV-ben nincs 'artist_name' oszlop.")
+        st.stop()
+
+    df = df[(df["artist_name"] != "") & (df["local_image_path"] != "")].copy()
+
+    # csak a ténylegesen létező képeket használjuk
+    df = df[df["local_image_path"].apply(lambda p: Path(p).exists())].copy()
 
     return df
 
 
 # ---- kérdés generálása ----
 def uj_kerdes(df):
-    # csak olyan sorok maradjanak, ahol van alkotó és képútvonal
-    df = df[(df["alkoto"] != "") & (df["kep_url"] != "")]
-    df = df.copy()
+    kulonbozo_alkotok = df["artist_name"].dropna().unique().tolist()
 
-    # legalább 4 különböző alkotó kell
-    kulonbozo_alkotok = df["alkoto"].dropna().unique().tolist()
     if len(kulonbozo_alkotok) < 4:
         return None
 
-    # kiválasztunk 1 képet
     sor = df.sample(1).iloc[0]
-    helyes_alkoto = sor["alkoto"]
+    helyes_alkoto = sor["artist_name"]
 
-    # 3 másik alkotó
     mas_alkotok = [a for a in kulonbozo_alkotok if a != helyes_alkoto]
     valaszok = random.sample(mas_alkotok, 3)
     valaszok.append(helyes_alkoto)
@@ -81,11 +96,15 @@ st.title("Magyar művészeti kvíz")
 st.write("Válaszd ki, ki festette a képet.")
 
 if df is None:
-    st.error("Nem találom a CSV fájlt itt: D:\\Flori_Art_Lab\\muveszeti_jatek\\muveszet_adatbank.csv")
+    st.error("Nem találom a CSV fájlt itt: data/hungart_osszes_muvesz_adatok.csv")
+    st.stop()
+
+if len(df) == 0:
+    st.error("Nincs használható adat vagy kép az adatbázisban.")
     st.stop()
 
 # ---- szűrés alkotóra ----
-alkoto_lista = sorted(df["alkoto"].dropna().unique().tolist())
+alkoto_lista = sorted(df["artist_name"].dropna().unique().tolist())
 alkoto_valasztas = st.sidebar.selectbox(
     "Szűrés alkotóra",
     ["Összes"] + alkoto_lista
@@ -94,42 +113,40 @@ alkoto_valasztas = st.sidebar.selectbox(
 if alkoto_valasztas == "Összes":
     szurt_df = df.copy()
 else:
-    szurt_df = df[df["alkoto"] == alkoto_valasztas].copy()
+    szurt_df = df[df["artist_name"] == alkoto_valasztas].copy()
 
 st.sidebar.write(f"Képek száma: {len(szurt_df)}")
 
-# ---- ha nincs elég adat ----
-if len(szurt_df) < 4 and alkoto_valasztas == "Összes":
-    st.error("Legalább 4 különböző alkotó kell a játékhoz.")
+if len(szurt_df) == 0:
+    st.error("Ehhez a szűréshez nincs elérhető kép.")
     st.stop()
-
-if alkoto_valasztas != "Összes":
-    st.warning("Ha csak egy alkotóra szűrsz, a 4 válaszlehetőség nem fog jól működni. Kezdésnek hagyd 'Összes'-en.")
 
 # ---- új kérdés ----
 if st.session_state.aktualis_kerdes is None:
-    st.session_state.aktualis_kerdes = uj_kerdes(df)
+    st.session_state.aktualis_kerdes = uj_kerdes(szurt_df if alkoto_valasztas == "Összes" else df)
 
 kerdes = st.session_state.aktualis_kerdes
 
 if kerdes is None:
-    st.error("Nem sikerült kérdést készíteni. Ellenőrizd a CSV adatokat.")
+    st.error("Nem sikerült kérdést készíteni. Legalább 4 különböző művész kell.")
     st.stop()
 
 sor = kerdes["sor"]
 
 # ---- kép elérési út ellenőrzése ----
-kep_ut = sor["kep_url"]
-
-# ha a pandas 'nan'-t olvasott be szövegként
-if kep_ut.lower() == "nan":
-    st.error("A kép útvonala hiányzik a CSV-ben.")
-    st.stop()
+kep_ut = sor["local_image_path"]
 
 if not Path(kep_ut).exists():
     st.error(f"Nem találom ezt a képet: {kep_ut}")
-    st.info("Valószínűleg a CSV-ben a kép neve vagy a kiterjesztése (.jpg / .png) nem pontos.")
     st.stop()
+
+# ---- adatok biztonságos kiolvasása ----
+cim = sor["title"] if "title" in sor else ""
+ev = sor["year"] if "year" in sor else ""
+technika = sor["technique"] if "technique" in sor else ""
+meret = sor["size"] if "size" in sor else ""
+hely = sor["location"] if "location" in sor else ""
+kategori = sor["category"] if "category" in sor else ""
 
 # ---- felület ----
 bal, jobb = st.columns([1.3, 1])
@@ -138,13 +155,17 @@ with bal:
     st.image(kep_ut, use_container_width=True)
 
 with jobb:
-    st.subheader(sor["kepcim"])
-    st.write(f"**Év:** {sor['ev']}")
-    st.write(f"**Téma:** {sor['tema']}")
-    st.write(f"**Gyűjtemény:** {sor['gyujtemeny']}")
-    st.write(f"**Technika:** {sor['technika']}")
-    st.write(f"**Hordozó:** {sor['hordozo']}")
-    st.write(f"**Méret:** {sor['meret']}")
+    st.subheader(cim if cim else "Cím nélkül")
+    if ev:
+        st.write(f"**Év:** {ev}")
+    if kategori:
+        st.write(f"**Kategória:** {kategori}")
+    if technika:
+        st.write(f"**Technika:** {technika}")
+    if meret:
+        st.write(f"**Méret:** {meret}")
+    if hely:
+        st.write(f"**Gyűjtemény / hely:** {hely}")
 
     valasztott = st.radio(
         "Ki az alkotó?",
@@ -169,7 +190,8 @@ if st.session_state.ellenorizve:
         st.error(f"Nem jó. A helyes válasz: {kerdes['helyes_alkoto']}")
 
     if st.button("Következő kép"):
-        st.session_state.aktualis_kerdes = uj_kerdes(df)
+        uj_df = szurt_df if alkoto_valasztas == "Összes" else df
+        st.session_state.aktualis_kerdes = uj_kerdes(uj_df)
         st.session_state.ellenorizve = False
         st.session_state.utolso_valasz = None
         st.rerun()
