@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 # ---- fájl helye ----
-CSV_FAJL = Path(r"D:\Flori_Art_Lab\muveszeti_jatek\muveszet_adatbank.csv")
+CSV_FAJL = Path("data/hungart_osszes_muvesz_adatok.csv")
 
 
 # ---- adatok betöltése ----
