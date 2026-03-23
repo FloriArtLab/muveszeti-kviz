@@ -11,9 +11,7 @@ st.set_page_config(
 )
 
 # ---- fájl helye ----
-CSV_FAJL = Path("data/hungart_osszes_muvesz_adatok.csv")
-KEP_MAPPA = Path("images")
-
+CSV_FAJL = Path("hungart_korszakokkal.csv")
 
 # ---- adatok betöltése ----
 @st.cache_data
@@ -23,181 +21,160 @@ def adatbetoltes():
 
     df = pd.read_csv(CSV_FAJL)
 
-    # szöveges oszlopok tisztítása
+    # üres helyek levágása
     for col in df.columns:
-        df[col] = df[col].fillna("").astype(str).str.strip()
+        df[col] = df[col].astype(str).str.strip()
 
-    # ha nincs filename oszlop, készítsük el az image_url-ből
-    if "filename" not in df.columns:
-        if "image_url" in df.columns:
-            df["filename"] = df["image_url"].str.split("/").str[-1]
-        else:
-            df["filename"] = ""
-
-    # helyi képelérési út
-    df["local_image_path"] = df["filename"].apply(lambda x: str(KEP_MAPPA / x) if x else "")
-
-    # csak olyan sorok maradjanak, ahol van művész + kép
-    if "artist_name" not in df.columns:
-        st.error("A CSV-ben nincs 'artist_name' oszlop.")
-        st.stop()
-
-    df = df[(df["artist_name"] != "") & (df["local_image_path"] != "")].copy()
-
-    # csak a ténylegesen létező képeket használjuk
-    df = df[df["local_image_path"].apply(lambda p: Path(p).exists())].copy()
+    # hiányzó értékek javítása
+    df = df.replace("nan", "")
+    df = df.replace("None", "")
 
     return df
 
 
 # ---- kérdés generálása ----
 def uj_kerdes(df):
-    kulonbozo_alkotok = df["artist_name"].dropna().unique().tolist()
+    # csak használható sorok
+    df_valid = df[
+        (df["artist_name"] != "") &
+        (df["image_url"] != "")
+    ].copy()
 
-    if len(kulonbozo_alkotok) < 4:
+    # legalább 4 különböző művész kell
+    egyedi_muveszek = df_valid["artist_name"].dropna().unique()
+    if len(egyedi_muveszek) < 4 or len(df_valid) == 0:
         return None
 
-    sor = df.sample(1).iloc[0]
-    helyes_alkoto = sor["artist_name"]
+    # helyes válasz sora
+    helyes_sor = df_valid.sample(1).iloc[0]
+    helyes_muvesz = helyes_sor["artist_name"]
+    kep_url = helyes_sor["image_url"]
+    cim = helyes_sor.get("title", "")
 
-    mas_alkotok = [a for a in kulonbozo_alkotok if a != helyes_alkoto]
-    valaszok = random.sample(mas_alkotok, 3)
-    valaszok.append(helyes_alkoto)
+    # rossz válaszok más művészektől
+    tobbi_muvesz = [m for m in egyedi_muveszek if m != helyes_muvesz]
+    rosszak = random.sample(list(tobbi_muvesz), 3)
+
+    valaszok = [helyes_muvesz] + rosszak
     random.shuffle(valaszok)
 
     return {
-        "sor": sor,
-        "helyes_alkoto": helyes_alkoto,
-        "valaszok": valaszok
+        "kep_url": kep_url,
+        "helyes_muvesz": helyes_muvesz,
+        "valaszok": valaszok,
+        "cim": cim
     }
 
 
-# ---- session state indulás ----
-if "pont" not in st.session_state:
-    st.session_state.pont = 0
+# ---- session state ----
+if "kerdes" not in st.session_state:
+    st.session_state.kerdes = None
 
-if "osszkerdes" not in st.session_state:
-    st.session_state.osszkerdes = 0
+if "valasz_ellenorizve" not in st.session_state:
+    st.session_state.valasz_ellenorizve = False
 
-if "ellenorizve" not in st.session_state:
-    st.session_state.ellenorizve = False
+if "kivalasztott_valasz" not in st.session_state:
+    st.session_state.kivalasztott_valasz = None
 
-if "utolso_valasz" not in st.session_state:
-    st.session_state.utolso_valasz = None
 
-if "aktualis_kerdes" not in st.session_state:
-    st.session_state.aktualis_kerdes = None
+def uj_kerdes_inditas(df_szurt):
+    st.session_state.kerdes = uj_kerdes(df_szurt)
+    st.session_state.valasz_ellenorizve = False
+    st.session_state.kivalasztott_valasz = None
 
 
 # ---- adatok beolvasása ----
 df = adatbetoltes()
 
 st.title("Magyar művészeti kvíz")
-st.write("Válaszd ki, ki festette a képet.")
 
 if df is None:
-    st.error("Nem találom a CSV fájlt itt: data/hungart_osszes_muvesz_adatok.csv")
+    st.error("Nem található a CSV fájl.")
     st.stop()
 
-if len(df) == 0:
-    st.error("Nincs használható adat vagy kép az adatbázisban.")
-    st.stop()
+# ---- kezdő szűrő ----
+st.subheader("Játék beállítása")
 
-# ---- szűrés alkotóra ----
-alkoto_lista = sorted(df["artist_name"].dropna().unique().tolist())
-alkoto_valasztas = st.sidebar.selectbox(
-    "Szűrés alkotóra",
-    ["Összes"] + alkoto_lista
+jatek_mod = st.radio(
+    "Válassz módot:",
+    ["Összes", "Korszakok"],
+    horizontal=True
 )
 
-if alkoto_valasztas == "Összes":
-    szurt_df = df.copy()
-else:
-    szurt_df = df[df["artist_name"] == alkoto_valasztas].copy()
+df_szurt = df.copy()
 
-st.sidebar.write(f"Képek száma: {len(szurt_df)}")
+if jatek_mod == "Korszakok":
+    korszakok = [
+        "1000-1600",
+        "1601-1700",
+        "1701-1750",
+        "1751-1800",
+        "1801-1850",
+        "1851-1900",
+        "1901-1950",
+        "1950-"
+    ]
 
-if len(szurt_df) == 0:
-    st.error("Ehhez a szűréshez nincs elérhető kép.")
-    st.stop()
+    elerheto_korszakok = [k for k in korszakok if k in df["korszak"].unique()]
 
-# ---- új kérdés ----
-if st.session_state.aktualis_kerdes is None:
-    st.session_state.aktualis_kerdes = uj_kerdes(szurt_df if alkoto_valasztas == "Összes" else df)
-
-kerdes = st.session_state.aktualis_kerdes
-
-if kerdes is None:
-    st.error("Nem sikerült kérdést készíteni. Legalább 4 különböző művész kell.")
-    st.stop()
-
-sor = kerdes["sor"]
-
-# ---- kép elérési út ellenőrzése ----
-kep_ut = sor["local_image_path"]
-
-if not Path(kep_ut).exists():
-    st.error(f"Nem találom ezt a képet: {kep_ut}")
-    st.stop()
-
-# ---- adatok biztonságos kiolvasása ----
-cim = sor["title"] if "title" in sor else ""
-ev = sor["year"] if "year" in sor else ""
-technika = sor["technique"] if "technique" in sor else ""
-meret = sor["size"] if "size" in sor else ""
-hely = sor["location"] if "location" in sor else ""
-kategori = sor["category"] if "category" in sor else ""
-
-# ---- felület ----
-bal, jobb = st.columns([1.3, 1])
-
-with bal:
-    st.image(kep_ut, use_container_width=True)
-
-with jobb:
-    st.subheader(cim if cim else "Cím nélkül")
-    if ev:
-        st.write(f"**Év:** {ev}")
-    if kategori:
-        st.write(f"**Kategória:** {kategori}")
-    if technika:
-        st.write(f"**Technika:** {technika}")
-    if meret:
-        st.write(f"**Méret:** {meret}")
-    if hely:
-        st.write(f"**Gyűjtemény / hely:** {hely}")
-
-    valasztott = st.radio(
-        "Ki az alkotó?",
-        kerdes["valaszok"],
-        index=None,
-        disabled=st.session_state.ellenorizve
+    kivalasztott_korszak = st.selectbox(
+        "Válassz korszakot:",
+        elerheto_korszakok
     )
 
-    if st.button("Válasz ellenőrzése", disabled=st.session_state.ellenorizve or valasztott is None):
-        st.session_state.ellenorizve = True
-        st.session_state.utolso_valasz = valasztott
-        st.session_state.osszkerdes += 1
+    df_szurt = df[df["korszak"] == kivalasztott_korszak].copy()
+    st.caption(f"Kiválasztott korszak: {kivalasztott_korszak}")
 
-        if valasztott == kerdes["helyes_alkoto"]:
-            st.session_state.pont += 1
+else:
+    st.caption("Az összes mű közül játszol.")
 
-# ---- visszajelzés ----
-if st.session_state.ellenorizve:
-    if st.session_state.utolso_valasz == kerdes["helyes_alkoto"]:
-        st.success(f"Helyes válasz! Az alkotó: {kerdes['helyes_alkoto']}")
-    else:
-        st.error(f"Nem jó. A helyes válasz: {kerdes['helyes_alkoto']}")
+# ---- ha még nincs kérdés, induljon ----
+if st.session_state.kerdes is None:
+    uj_kerdes_inditas(df_szurt)
 
-    if st.button("Következő kép"):
-        uj_df = szurt_df if alkoto_valasztas == "Összes" else df
-        st.session_state.aktualis_kerdes = uj_kerdes(uj_df)
-        st.session_state.ellenorizve = False
-        st.session_state.utolso_valasz = None
+# ---- ha a szűrés megváltozott, lehessen új kérdést kérni ----
+if st.button("Új játék / új kérdés"):
+    uj_kerdes_inditas(df_szurt)
+
+# ---- ellenőrzés: van-e elég adat ----
+if st.session_state.kerdes is None:
+    st.warning("Ebben a szűrésben nincs elég adat a játékhoz.")
+    st.stop()
+
+kerdes = st.session_state.kerdes
+
+# ---- kép megjelenítés ----
+st.image(kerdes["kep_url"], use_container_width=True)
+
+# ---- válaszlehetőségek ----
+valasztott = st.radio(
+    "Ki készítette ezt a művet?",
+    kerdes["valaszok"],
+    index=None
+)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("Ellenőrzés"):
+        st.session_state.kivalasztott_valasz = valasztott
+        st.session_state.valasz_ellenorizve = True
+
+with col2:
+    if st.button("Következő kérdés"):
+        uj_kerdes_inditas(df_szurt)
         st.rerun()
 
-st.divider()
-st.write(f"**Pontszám:** {st.session_state.pont} / {st.session_state.osszkerdes}")
+# ---- visszajelzés ----
+if st.session_state.valasz_ellenorizve:
+    if st.session_state.kivalasztott_valasz is None:
+        st.warning("Előbb válassz egy lehetőséget.")
+    elif st.session_state.kivalasztott_valasz == kerdes["helyes_muvesz"]:
+        st.success(f"Helyes! A művész: {kerdes['helyes_muvesz']}")
+    else:
+        st.error(
+            f"Nem ez a helyes válasz. A helyes válasz: {kerdes['helyes_muvesz']}"
+        )
 
-with st.expander("Adatok megjelenítése"):
-    st.dataframe(df, use_container_width=True)
+    if kerdes["cim"]:
+        st.write(f"**Mű címe:** {kerdes['cim']}")
