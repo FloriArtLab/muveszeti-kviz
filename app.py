@@ -6,6 +6,14 @@ import streamlit as st
 
 # ---- oldal beállítás ----
 st.set_page_config(
+    st.markdown("""
+<style>
+.block-container {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+</style>
+""", unsafe_allow_html=True)
     page_title="Művészeti kvíz",
     layout="wide"
 )
