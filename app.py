@@ -174,6 +174,7 @@ if st.session_state.kerdes is None:
 kerdes = st.session_state.kerdes
 
 # ---- kép megjelenítés ----
+
 height = 420
 
 st.markdown(
@@ -183,33 +184,42 @@ st.markdown(
         display:flex;
         align-items:center;
         justify-content:center;
-        margin-bottom:10px;
+        margin-bottom:12px;
     ">
-        <img src="{kerdes['kep_url']}" 
-             style="max-height:100%; max-width:100%; object-fit:contain;"/>
+        <img src="{kerdes['kep_url']}"
+             style="max-height:100%; max-width:100%; object-fit:contain;" />
     </div>
     """,
     unsafe_allow_html=True
 )
 
-# ---- válaszlehetőségek ----
-valasztott = st.radio(
-    "Ki készítette ezt a művet?",
-    kerdes["valaszok"],
-    index=None
-)
+# ---- válaszok + akciók egy sorban ----
+bal, jobb = st.columns([3, 1.2])
 
-col1, col2 = st.columns(2)
+with bal:
+    valasztott = st.radio(
+        "Ki készítette ezt a művet?",
+        kerdes["valaszok"],
+        index=None,
+        label_visibility="collapsed"
+    )
 
-with col1:
-    if st.button("Ellenőrzés"):
+with jobb:
+    if st.button("Ellenőrzés", use_container_width=True):
         st.session_state.kivalasztott_valasz = valasztott
         st.session_state.valasz_ellenorizve = True
 
-with col2:
-    if st.button("Következő kérdés"):
+    if st.button("Következő kérdés", use_container_width=True):
         uj_kerdes_inditas(df_szurt)
         st.rerun()
+
+    if st.session_state.valasz_ellenorizve:
+        if st.session_state.kivalasztott_valasz is None:
+            st.warning("Előbb válassz egy lehetőséget.")
+        elif st.session_state.kivalasztott_valasz == kerdes["helyes_muvesz"]:
+            st.success(f"Helyes! {kerdes['helyes_muvesz']}")
+        else:
+            st.error(f"Helyes válasz: {kerdes['helyes_muvesz']}")
 
 # ---- visszajelzés ----
 if st.session_state.valasz_ellenorizve:
