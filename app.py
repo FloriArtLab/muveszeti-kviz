@@ -13,9 +13,6 @@ st.set_page_config(
 # ---- fájl helye ----
 CSV_FAJL = Path(__file__).parent / "hungart_korszakokkal.csv"
 
-st.write("CSV útvonal:", CSV_FAJL)
-st.write("CSV létezik?:", CSV_FAJL.exists())
-st.write("Fájlok itt:", [p.name for p in Path(__file__).parent.iterdir()])
 
 # ---- adatok betöltése ----
 @st.cache_data
@@ -27,7 +24,7 @@ def adatbetoltes():
 
         df = pd.read_csv(CSV_FAJL)
 
-        st.write("CSV betöltve, sorok száma:", len(df))
+       
 
         # üres helyek levágása
         for col in df.columns:
