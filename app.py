@@ -145,7 +145,23 @@ if st.session_state.kerdes is None:
 kerdes = st.session_state.kerdes
 
 # ---- kép megjelenítés ----
-st.image(kerdes["kep_url"], use_container_width=True)
+height = 420
+
+st.markdown(
+    f"""
+    <div style="
+        height:{height}px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        margin-bottom:10px;
+    ">
+        <img src="{kerdes['kep_url']}" 
+             style="max-height:100%; max-width:100%; object-fit:contain;"/>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # ---- válaszlehetőségek ----
 valasztott = st.radio(
