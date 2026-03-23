@@ -141,8 +141,8 @@ with col2:
         def korszak_kezdete(k):
             try:
                 return int(str(k).split("-")[0])
-    except:
-        return 0  # hibás értékek kiszűrése
+            except:
+                return 0  # hibás értékek kiszűrése
         
         korszakok = [k for k in korszakok if korszak_kezdete(k) >= 1801]
 
