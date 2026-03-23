@@ -20,20 +20,27 @@ st.write("Fájlok itt:", [p.name for p in Path(__file__).parent.iterdir()])
 # ---- adatok betöltése ----
 @st.cache_data
 def adatbetoltes():
-    if not CSV_FAJL.exists():
+    try:
+        if not CSV_FAJL.exists():
+            st.error("CSV nem létezik")
+            return None
+
+        df = pd.read_csv(CSV_FAJL)
+
+        st.write("CSV betöltve, sorok száma:", len(df))
+
+        # üres helyek levágása
+        for col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+
+        df = df.replace("nan", "")
+        df = df.replace("None", "")
+
+        return df
+
+    except Exception as e:
+        st.error(f"Hiba a betöltésnél: {e}")
         return None
-
-    df = pd.read_csv(CSV_FAJL)
-
-    # üres helyek levágása
-    for col in df.columns:
-        df[col] = df[col].astype(str).str.strip()
-
-    # hiányzó értékek javítása
-    df = df.replace("nan", "")
-    df = df.replace("None", "")
-
-    return df
 
 
 # ---- kérdés generálása ----
