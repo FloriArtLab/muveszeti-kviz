@@ -10,6 +10,19 @@ st.set_page_config(
     layout="wide"
 )
 
+# ---- kompakt felső margó ----
+st.markdown(
+    """
+    <style>
+    .block-container {
+        padding-top: 0.6rem;
+        padding-bottom: 0.6rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # ---- kisebb felső margó ----
 st.markdown(
     """
@@ -107,41 +120,42 @@ def uj_kerdes_inditas(df_szurt):
 # ---- adatok beolvasása ----
 df = adatbetoltes()
 
-st.title("Magyar művészeti kvíz")
+st.markdown("## Magyar művészeti kvíz")
 
-if df is None:
-    st.error("Nem található a CSV fájl.")
-    st.stop()
+col1, col2 = st.columns([1.2, 2])
 
-# ---- kezdő szűrő ----
-st.subheader("Játék beállítása")
-
-jatek_mod = st.radio(
-    "Válassz módot:",
-    ["Összes", "Korszakok"],
-    horizontal=True
-)
-
-df_szurt = df.copy()
-
-if jatek_mod == "Korszakok":
-
-    # automatikusan az adatbázisból
-    korszakok = sorted(df["korszak"].dropna().unique())
-
-    # csak 1800 utániak
-    korszakok = [k for k in korszakok if k >= "1801-1850"]
-
-    kivalasztott_korszak = st.selectbox(
-        "Válassz korszakot:",
-        korszakok
+with col1:
+    st.markdown("**Játék beállítása**")
+    jatek_mod = st.radio(
+        "Mód",
+        ["Összes", "Korszakok"],
+        horizontal=True,
+        label_visibility="collapsed"
     )
 
-    df_szurt = df[df["korszak"] == kivalasztott_korszak].copy()
+with col2:
+    if jatek_mod == "Korszakok":
+        st.markdown("**Korszak**")
 
-else:
-    st.caption("Az összes mű közül játszol.")
+        korszakok = sorted(df["korszak"].dropna().unique())
 
+        def korszak_kezdete(k):
+            return int(k.split("-")[0])
+
+        korszakok = [k for k in korszakok if korszak_kezdete(k) >= 1801]
+
+        kivalasztott_korszak = st.selectbox(
+            "Korszak",
+            korszakok,
+            label_visibility="collapsed"
+        )
+
+        df_szurt = df[df["korszak"] == kivalasztott_korszak].copy()
+    else:
+        st.markdown("**Korszak**")
+        st.caption("Összes korszak")
+        df_szurt = df.copy()
+        
 # ---- ha még nincs kérdés, induljon ----
 if st.session_state.kerdes is None:
     uj_kerdes_inditas(df_szurt)
