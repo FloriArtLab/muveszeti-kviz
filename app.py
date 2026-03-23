@@ -112,26 +112,19 @@ jatek_mod = st.radio(
 df_szurt = df.copy()
 
 if jatek_mod == "Korszakok":
-    korszakok = [
-        "1000-1600",
-        "1601-1700",
-        "1701-1750",
-        "1751-1800",
-        "1801-1850",
-        "1851-1900",
-        "1901-1950",
-        "1950-"
-    ]
 
-    elerheto_korszakok = [k for k in korszakok if k in df["korszak"].unique()]
+    # automatikusan az adatbázisból
+    korszakok = sorted(df["korszak"].dropna().unique())
+
+    # csak 1800 utániak
+    korszakok = [k for k in korszakok if k >= "1801-1850"]
 
     kivalasztott_korszak = st.selectbox(
         "Válassz korszakot:",
-        elerheto_korszakok
+        korszakok
     )
 
     df_szurt = df[df["korszak"] == kivalasztott_korszak].copy()
-    st.caption(f"Kiválasztott korszak: {kivalasztott_korszak}")
 
 else:
     st.caption("Az összes mű közül játszol.")
